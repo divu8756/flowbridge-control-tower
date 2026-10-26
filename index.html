@@ -1,0 +1,598 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>FlowBridge Control Tower</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Open+Sans:wght@300;400;600;700&display=swap">
+<style>
+/* Layout: an operations console. Sticky top bar + tabs, then each tab is a grid of panels: summary first, detail beside it. */
+:root{
+  --bg:#F5F6F6; --panel:#FFFFFF; --panel-2:#F5F6F6; --line:#E3E5E6; --ink:#111111; --ink-2:#555555; --ink-3:#767676;
+  --accent:#007FBE; --accent-soft:#E6F3FA; --accent-ink:#FFFFFF;
+  --ok:#26890D; --ok-soft:#E5F4E0; --warn:#A35F00; --warn-soft:#FBEED9; --bad:#B42318; --bad-soft:#FCE6E3; --info:#2D5BD0; --info-soft:#E3EAFB;
+  --code-bg:#F3F5F7; --add:#DDF3E4; --del:#FBE3E1;
+  --f-display:"Open Sans",Arial,sans-serif;
+  --f-body:"Open Sans",-apple-system,"Segoe UI",Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#050505; --panel:#111111; --panel-2:#1A1A1A; --line:#2A2A2A; --ink:#FFFFFF; --ink-2:#CCCCCC; --ink-3:#A0A0A0;
+  --accent:#3FA9E0; --accent-soft:#0B2A3A; --accent-ink:#050505;
+  --ok:#43B02A; --ok-soft:#14290F; --warn:#E3A74A; --warn-soft:#3A2B12; --bad:#F2776B; --bad-soft:#3D1D1A; --info:#86A7F5; --info-soft:#1C2742;
+  --code-bg:#121920; --add:#16301F; --del:#3A1C1A; color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#050505; --panel:#111111; --panel-2:#1A1A1A; --line:#2A2A2A; --ink:#FFFFFF; --ink-2:#CCCCCC; --ink-3:#A0A0A0;
+  --accent:#3FA9E0; --accent-soft:#0B2A3A; --accent-ink:#050505;
+  --ok:#43B02A; --ok-soft:#14290F; --warn:#E3A74A; --warn-soft:#3A2B12; --bad:#F2776B; --bad-soft:#3D1D1A; --info:#86A7F5; --info-soft:#1C2742;
+  --code-bg:#121920; --add:#16301F; --del:#3A1C1A; color-scheme:dark;}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.45}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+.wrap{max-width:1360px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding-block:10px}
+.brand{display:flex;align-items:baseline;gap:10px;margin-right:auto}
+.brand b{font-family:var(--f-display);font-size:20px;font-weight:300;letter-spacing:0}.brand b strong{font-weight:700}
+.brand span{font-family:var(--f-mono);font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.8px}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:500;white-space:nowrap}
+.pill.accent{background:var(--accent-soft);color:var(--accent)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)} .pill.info{background:var(--info-soft);color:var(--info)}
+.pill.ghost{border:1px solid var(--line);color:var(--ink-2)}
+.live{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 60%,transparent)}100%{box-shadow:0 0 0 8px transparent}}
+@media (prefers-reduced-motion:reduce){.live,.cell.heal{animation:none}}
+nav.tabs{display:flex;gap:2px;overflow-x:auto}
+nav.tabs button{font:500 13px var(--f-body);color:var(--ink-2);background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;cursor:pointer;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+nav.tabs button .n{font-family:var(--f-mono);font-size:11px;background:var(--bad-soft);color:var(--bad);border-radius:999px;padding:0 6px;margin-left:6px}
+nav.tabs button:focus-visible,button:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main{padding-block:18px 40px}
+.proto{font-size:12px;color:var(--ink-3);margin-bottom:12px}
+h2{font-family:var(--f-display);font-weight:600;font-size:16px;margin:0;letter-spacing:0;border-left:4px solid #43B02A;padding-left:10px}
+h3{font-family:var(--f-display);font-weight:600;font-size:14px;margin:0 0 8px}
+.label{font-family:var(--f-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.9px;color:var(--ink-3)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
+.panel-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:14px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;min-width:0}
+.kpi .v{font-family:var(--f-display);font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1;margin-top:4px}
+.kpi .d{font-size:12px;color:var(--ink-2);margin-top:2px}
+.kpi .d.good{color:var(--ok)}
+.grid-ov{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:14px}
+.stack{display:grid;gap:14px;min-width:0}
+.cells{display:grid;grid-template-columns:repeat(22,minmax(0,1fr));gap:3px}
+.cell{aspect-ratio:1;border-radius:2px;background:var(--ok);opacity:.55;max-width:100%}
+.cell.drift{background:var(--warn);opacity:1}.cell.broken{background:var(--bad);opacity:1}
+.cell.heal{background:var(--accent);opacity:1;animation:blink 1.4s infinite}
+@keyframes blink{50%{opacity:.35}}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink-2);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.feed{list-style:none;margin:0;padding:0;max-height:430px;overflow:auto}
+.feed li{display:grid;grid-template-columns:52px 1fr;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.feed li:first-child{border-top:0}
+.feed time{font-family:var(--f-mono);font-size:11px;color:var(--ink-3);padding-top:2px}
+.feed .who{font-family:var(--f-mono);font-size:10.5px;font-weight:500;text-transform:uppercase;letter-spacing:.6px;margin-right:6px}
+.who.sense{color:var(--info)}.who.heal{color:var(--accent)}.who.grow{color:var(--ok)}.who.protect{color:var(--bad)}.who.human{color:var(--ink-2)}
+.feed li.new{animation:fade .6s}
+@keyframes fade{from{background:var(--accent-soft)}to{background:transparent}}
+svg text{fill:var(--ink-3);font-family:var(--f-mono);font-size:10px}
+.agents{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.agent{border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--panel-2);min-width:0}
+.agent b{font-family:var(--f-display);font-size:14px}
+.agent p{margin:4px 0 0;font-size:12px;color:var(--ink-2)}
+/* Heal queue */
+.grid-q{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:14px}
+.inc{display:block;width:100%;text-align:left;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:6px;padding:10px 12px;margin-bottom:8px;cursor:pointer;color:var(--ink);font:inherit}
+.inc[aria-current="true"]{outline:2px solid var(--accent);outline-offset:-1px}
+.inc.t1{border-left-color:var(--info)}.inc.t2{border-left-color:var(--warn)}.inc.t3{border-left-color:var(--bad)}.inc.done{opacity:.6;border-left-color:var(--ok)}
+.inc .row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.inc .id{font-family:var(--f-mono);font-size:11px;color:var(--ink-3)}
+.inc .t{font-weight:600;margin:3px 0}
+.inc .m{font-size:12px;color:var(--ink-2)}
+.facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}
+.fact{background:var(--panel-2);border-radius:6px;padding:8px 10px;min-width:0}
+.fact .v{font-family:var(--f-display);font-weight:600;font-size:18px;font-variant-numeric:tabular-nums}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+pre.diff{background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:10px 0;font:12px/1.55 var(--f-mono);overflow-x:auto;margin:0}
+pre.diff span{display:block;padding:0 12px;white-space:pre}
+pre.diff .a{background:var(--add)}pre.diff .r{background:var(--del)}
+.summary{background:var(--accent-soft);border-radius:6px;padding:10px 12px;font-size:13px}
+.checks{list-style:none;padding:0;margin:0;font-size:13px}
+.checks li{display:flex;gap:8px;padding:5px 0;border-top:1px dashed var(--line)}
+.checks li:first-child{border-top:0}
+.ck{font-family:var(--f-mono);font-weight:600;width:16px;flex:none}
+.ck.y{color:var(--ok)}.ck.o{color:var(--ink-3)}.ck.n{color:var(--bad)}.ck.w{color:var(--warn)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+.btn{font:500 13px var(--f-body);border-radius:6px;padding:8px 14px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);border-radius:999px;padding:8px 20px}
+.btn.danger{color:var(--bad)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.progress{height:8px;background:var(--panel-2);border-radius:999px;overflow:hidden;margin-top:8px}
+.progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .6s}
+.canary{font-family:var(--f-mono);font-size:12px;color:var(--ink-2);margin-top:6px}
+/* Build */
+.grid-b{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:14px}
+textarea{width:100%;min-height:96px;font:14px/1.5 var(--f-body);color:var(--ink);background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:10px;resize:vertical}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.chip{font:12px var(--f-body);border:1px solid var(--line);background:var(--panel);color:var(--ink-2);border-radius:999px;padding:4px 10px;cursor:pointer}
+.steps{list-style:none;margin:0;padding:0}
+.steps li{display:grid;grid-template-columns:24px 1fr;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.steps li:first-child{border-top:0}
+.dot{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font:600 11px var(--f-mono);color:var(--ink-3)}
+.steps li.done .dot{border-color:var(--ok);color:var(--ok)}
+.steps li.stop .dot{border-color:var(--bad);color:var(--bad)}
+.steps li.ask .dot{border-color:var(--warn);color:var(--warn)}
+.steps li.wait{opacity:.45}
+.steps .st{font-weight:600}
+.steps .sd{font-size:13px;color:var(--ink-2);margin-top:2px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{text-align:left;font:500 10.5px var(--f-mono);text-transform:uppercase;letter-spacing:.7px;color:var(--ink-3);padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+td.mono{font-family:var(--f-mono);font-size:12px}
+.tscroll{overflow-x:auto}
+/* Governance */
+.grid-g{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:14px}
+.matrix td,.matrix th{text-align:center}.matrix td:first-child,.matrix th:first-child{text-align:left}
+.switch{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.switch:first-of-type{border-top:0}
+.tog{width:40px;height:22px;border-radius:999px;background:var(--ok);border:0;position:relative;cursor:pointer;flex:none}
+.tog::after{content:"";position:absolute;top:3px;left:21px;width:16px;height:16px;border-radius:50%;background:var(--panel);transition:left .2s}
+.tog[aria-pressed="false"]{background:var(--line)}.tog[aria-pressed="false"]::after{left:3px}
+/* Evals */
+.grid-e{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px}
+/* KPIs + roadmap */
+.strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:4px}
+.group-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:22px 0 10px;flex-wrap:wrap}
+.group-h p{margin:0;font-size:12.5px;color:var(--ink-2)}
+.kgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.kgrid.one{grid-template-columns:minmax(0,1fr)}
+.kc{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;min-width:0;display:flex;flex-direction:column;gap:6px}
+.kc.big{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:18px;align-items:center}
+.kc .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.kc .name{font-weight:600;font-size:13.5px}
+.kc .val{font-family:var(--f-display);font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.kc.big .val{font-size:48px}
+.kc .tg{font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.kc .def{font-size:12px;color:var(--ink-3);margin:0}
+.kc svg{width:100%;height:52px;display:block}
+.kc.big svg{height:120px}
+.track2{position:relative;display:flex;gap:3px;margin:8px 0 26px}
+.seg{border-radius:4px;padding:8px 10px;font-size:12px;font-weight:500;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.seg.done{background:var(--ok-soft);color:var(--ok)}.seg.cur{background:var(--accent);color:var(--accent-ink)}.seg.next{background:var(--panel-2);color:var(--ink-2);border:1px dashed var(--line)}
+.today{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--bad)}
+.today span{position:absolute;top:100%;left:50%;transform:translateX(-50%);font:500 11px var(--f-mono);color:var(--bad);white-space:nowrap;margin-top:4px}
+.road{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.ph{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.ph.cur{border-color:var(--accent);box-shadow:inset 0 4px 0 var(--accent)}
+.ph h3{font-size:17px;margin:0}
+.ph .who{font-size:12.5px;color:var(--ink-2);background:var(--panel-2);border-radius:6px;padding:6px 8px}
+.ph ul{list-style:none;margin:0;padding:0;font-size:13px}
+.ph li{display:flex;gap:8px;padding:4px 0;border-top:1px dashed var(--line)}
+.ph li:first-child{border-top:0}
+.ph .gl{font:500 10.5px var(--f-mono);text-transform:uppercase;letter-spacing:.7px;color:var(--ink-3);margin-top:4px}
+.meter{height:6px;background:var(--panel-2);border-radius:999px;overflow:hidden}.meter i{display:block;height:100%;background:var(--accent)}
+.bars{display:grid;gap:16px}
+.bar-row .top{display:flex;justify-content:space-between;gap:8px;font-size:13px}
+.track{position:relative;height:14px;background:var(--panel-2);border-radius:3px;margin-top:6px}
+.fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--accent)}
+.gate{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink)}
+.gate.g2{background:var(--ink-3)}
+.gate-l{font:10px var(--f-mono);color:var(--ink-3);margin-top:4px;display:flex;gap:14px;flex-wrap:wrap}
+@media (max-width:1100px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.grid-ov,.grid-q,.grid-b,.grid-g,.grid-e{grid-template-columns:minmax(0,1fr)}.kgrid,.road{grid-template-columns:repeat(2,minmax(0,1fr))}.strip{grid-template-columns:repeat(3,minmax(0,1fr))}.kc.big{grid-template-columns:minmax(0,1fr)}.agents{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:620px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}.two{grid-template-columns:minmax(0,1fr)}.cells{grid-template-columns:repeat(15,minmax(0,1fr))}.brand span{display:none}.kgrid,.road{grid-template-columns:minmax(0,1fr)}.strip{grid-template-columns:repeat(2,minmax(0,1fr))}.seg{font-size:10px;padding:6px}}
+</style></head><body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="bar">
+      <div class="brand"><b>FlowBridge <strong>Control Tower</strong></b><span>Agent operations</span></div>
+      <span class="pill ghost" title="Tenant">Tenant: Northwind Health (Enterprise)</span>
+      <span class="pill accent" title="Autonomy level for this tenant">Phase 1 · Assisted</span>
+      <span class="pill ok"><i class="live" aria-hidden="true"></i>Simulated feed</span>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" id="t-overview" aria-selected="true" data-tab="overview">Overview</button>
+      <button role="tab" id="t-kpi" aria-selected="false" data-tab="kpi">KPIs</button>
+      <button role="tab" id="t-roadmap" aria-selected="false" data-tab="roadmap">Roadmap</button>
+      <button role="tab" id="t-heal" aria-selected="false" data-tab="heal">Heal queue<span class="n" id="qcount">3</span></button>
+      <button role="tab" id="t-build" aria-selected="false" data-tab="build">Build from intent</button>
+      <button role="tab" id="t-gov" aria-selected="false" data-tab="gov">Governance</button>
+      <button role="tab" id="t-evals" aria-selected="false" data-tab="evals">Evals</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <p class="proto"><b>Projected view:</b> what the Control Tower should show at week 10 of the MVP. All data is simulated to illustrate the targets; these are not FlowBridge production figures.</p>
+
+  <!-- OVERVIEW -->
+  <section id="overview" role="tabpanel" aria-labelledby="t-overview">
+    <div class="kpis">
+      <div class="kpi"><div class="label">Connectors healthy</div><div class="v" id="k-healthy">214 / 220</div><div class="d" id="k-healthy-d">6 need attention</div></div>
+      <div class="kpi"><div class="label">Median time to repair</div><div class="v" id="k-mttr">1.6 d</div><div class="d good">Baseline 11 d</div></div>
+      <div class="kpi"><div class="label">Breaks caught before customers</div><div class="v" id="k-pre">82%</div><div class="d">Detected by contract watcher</div></div>
+      <div class="kpi"><div class="label">Engineer days reclaimed (30 d)</div><div class="v" id="k-days">31</div><div class="d good">Redeployed to gap backlog</div></div>
+      <div class="kpi"><div class="label">Sensitive flows governed</div><div class="v" id="k-flows">1,284</div><div class="d"><span id="k-blocked">17</span> blocked this week</div></div>
+      <div class="kpi"><div class="label">Workflow runs today</div><div class="v" id="k-runs">0</div><div class="d">~35 per second platform-wide</div></div>
+    </div>
+
+    <div class="grid-ov">
+      <div class="stack">
+        <div class="panel">
+          <div class="panel-h"><h2>Connector health map</h2><span class="label">220 connectors · contract watcher</span></div>
+          <div class="cells" id="cells" aria-label="Health of 220 connectors"></div>
+          <div class="legend"><span><i style="background:var(--ok);opacity:.55"></i>Healthy</span><span><i style="background:var(--warn)"></i>Contract drift detected</span><span><i style="background:var(--bad)"></i>Broken</span><span><i style="background:var(--accent)"></i>Patch in canary</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-h"><h2>Time to repair a broken connector</h2><span class="label">Median, days, by week since MVP launch</span></div>
+          <svg id="mttr" viewBox="0 0 640 190" width="100%" role="img" aria-label="Median time to repair falls from 11 days to 1.6 days over 12 weeks"></svg>
+        </div>
+        <div class="panel">
+          <div class="panel-h"><h2>Agents</h2><span class="label">One control plane, four roles</span></div>
+          <div class="agents">
+            <div class="agent"><b>Sense</b><p>Watches API specs, changelogs and error signatures for drift and gaps.</p></div>
+            <div class="agent"><b>Heal</b><p>Diagnoses breaks, writes the patch, proves it on replayed traffic.</p></div>
+            <div class="agent"><b>Grow</b><p>Turns a business request into a tested integration plan.</p></div>
+            <div class="agent"><b>Protect</b><p>Rule-based gate on every action: sensitive data, policy, audit.</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-h"><h2>Live agent activity</h2><span class="label" id="feedcount">streaming</span></div>
+        <ul class="feed" id="feed" aria-live="polite"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- HEAL -->
+  <section id="heal" role="tabpanel" aria-labelledby="t-heal" hidden>
+    <div class="grid-q">
+      <div id="inclist" aria-label="Incidents"></div>
+      <div class="panel" id="incdetail"></div>
+    </div>
+  </section>
+
+  <!-- BUILD -->
+  <section id="build" role="tabpanel" aria-labelledby="t-build" hidden>
+    <div class="grid-b">
+      <div class="panel">
+        <h2>Describe what you need</h2>
+        <p style="color:var(--ink-2);margin:6px 0 10px">Write it the way you'd say it to a colleague. The agent plans it, checks policy and tests it in a sandbox before anyone approves.</p>
+        <label class="label" for="intent">Business intent</label>
+        <textarea id="intent">When an opportunity is Closed Won in Salesforce, create a project in Asana and a draft invoice in QuickBooks.</textarea>
+        <div class="chips" aria-label="Try an example">
+          <button class="chip" data-ex="0">Closed Won → Asana + QuickBooks</button>
+          <button class="chip" data-ex="1">Slack alert for big deals</button>
+          <button class="chip" data-ex="2">Card numbers to a Sheet</button>
+          <button class="chip" data-ex="3">Appointment SMS reminders</button>
+        </div>
+        <div class="actions"><button class="btn primary" id="plan">Plan integration</button><span class="label">Golden Data Set cases G-01, G-05, G-06, G-03</span></div>
+      </div>
+      <div class="panel">
+        <div class="panel-h"><h2>Agent plan</h2><span class="pill ghost" id="planstate">Waiting for a request</span></div>
+        <ol class="steps" id="steps"></ol>
+        <div id="mapwrap"></div>
+        <div class="actions" id="planactions"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GOVERNANCE -->
+  <section id="gov" role="tabpanel" aria-labelledby="t-gov" hidden>
+    <div class="grid-g">
+      <div class="panel">
+        <div class="panel-h"><h2>Audit ledger</h2><span class="label">Append-only · each entry chained to the previous hash</span></div>
+        <div class="tscroll"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Hash</th></tr></thead><tbody id="ledger"></tbody></table></div>
+      </div>
+      <div class="stack">
+        <div class="panel">
+          <h2 style="margin-bottom:10px">Who decides, by risk tier</h2>
+          <div class="tscroll"><table class="matrix">
+            <thead><tr><th>Change</th><th>MVP</th><th>Phase 2</th><th>Phase 3</th></tr></thead>
+            <tbody>
+              <tr><td>T0 Outage, retry only</td><td><span class="pill ok">Auto</span></td><td><span class="pill ok">Auto</span></td><td><span class="pill ok">Auto</span></td></tr>
+              <tr><td>T1 Format, paging, version</td><td><span class="pill warn">Engineer approves</span></td><td><span class="pill info">Auto + canary</span></td><td><span class="pill ok">Auto</span></td></tr>
+              <tr><td>T2 Mapping, backfill</td><td><span class="pill warn">Engineer approves</span></td><td><span class="pill warn">Engineer approves</span></td><td><span class="pill info">Auto + canary</span></td></tr>
+              <tr><td>T3 Auth, sensitive data, PHI</td><td><span class="pill bad">Human + compliance</span></td><td><span class="pill bad">Human + compliance</span></td><td><span class="pill bad">Human + compliance</span></td></tr>
+            </tbody></table></div>
+        </div>
+        <div class="panel">
+          <h2 style="margin-bottom:6px">Kill switches</h2>
+          <p style="font-size:12px;color:var(--ink-2);margin:0 0 6px">Pausing an agent stops new actions for this tenant immediately. Workflows keep running on the last approved version.</p>
+          <div id="switches"></div>
+        </div>
+        <div class="panel">
+          <h2 style="margin-bottom:8px">Blocked this week</h2>
+          <ul class="checks">
+            <li><span class="ck n">×</span><span>National ID → Slack channel (P-02)</span></li>
+            <li><span class="ck n">×</span><span>Opted-out customers → ad audience (P-15)</span></li>
+            <li><span class="ck n">×</span><span>Instruction hidden in a vendor changelog (H-15)</span></li>
+            <li><span class="ck w">!</span><span>Salary → BI tool sent for data-owner approval (P-08)</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- EVALS -->
+  <section id="evals" role="tabpanel" aria-labelledby="t-evals" hidden>
+    <div class="grid-e">
+      <div class="panel">
+        <div class="panel-h"><h2>Golden Data Set results</h2><span class="label">Run #27 · 47 cases · illustrative</span></div>
+        <div class="bars" id="bars"></div>
+        <p style="font-size:12px;color:var(--ink-2);margin:16px 0 0">Black line: gate to ship assisted mode. Grey line: gate to unlock autonomy. The MVP clears every ship gate and no autonomy gate yet, so every production change still needs a human.</p>
+      </div>
+      <div class="stack">
+        <div class="panel">
+          <h2 style="margin-bottom:8px">Shadow mode vs human engineers</h2>
+          <table><thead><tr><th>Real breaks (last 30 d)</th><th style="text-align:right">Count</th></tr></thead><tbody>
+            <tr><td>Agent fix matched engineer fix</td><td class="mono" style="text-align:right">29</td></tr>
+            <tr><td>Agent fix accepted with small edits</td><td class="mono" style="text-align:right">6</td></tr>
+            <tr><td>Agent correctly abstained</td><td class="mono" style="text-align:right">3</td></tr>
+            <tr><td>Agent fix wrong (caught by replay)</td><td class="mono" style="text-align:right">4</td></tr>
+            <tr><td>Agent fix wrong (passed replay)</td><td class="mono" style="text-align:right;color:var(--bad)">1</td></tr>
+          </tbody></table>
+          <p style="font-size:12px;color:var(--ink-2);margin:10px 0 0">The one fix that passed replay but was wrong became new Golden Data Set case H-19. Every miss becomes a test.</p>
+        </div>
+        <div class="panel">
+          <h2 style="margin-bottom:8px">Rubber-stamp watch</h2>
+          <p style="font-size:13px;margin:0">Median approval time <b>3 min 40 s</b>. Approvals under 10 seconds: <b>2%</b>. Above 5%, the reviewer is prompted to open the diff before approving.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  <!-- KPIS -->
+  <section id="kpi" role="tabpanel" aria-labelledby="t-kpi" hidden>
+    <div class="strip" id="kstrip"></div>
+    <div class="group-h"><h2>North star</h2><p>Is the customer problem from the brief getting smaller?</p></div>
+    <div class="kgrid one" id="g-north"></div>
+    <div class="group-h"><h2>Drivers</h2><p>Status compares progress from baseline to the MVP target due at week 12. Today is week 10.</p></div>
+    <div class="kgrid" id="g-drivers"></div>
+    <div class="group-h"><h2>Guardrails</h2><p>Hard limits. One breach pauses autonomy work.</p></div>
+    <div class="kgrid" id="g-guard"></div>
+    <div class="group-h"><h2>Eval gates</h2><p>Golden Data Set scores by run. Dashed line: ship gate. Solid line: autonomy gate.</p></div>
+    <div class="kgrid" id="g-evals"></div>
+  </section>
+
+  <!-- ROADMAP -->
+  <section id="roadmap" role="tabpanel" aria-labelledby="t-roadmap" hidden>
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-h"><h2>Program timeline</h2><span class="label">77 weeks · gates, not dates, move phases</span></div>
+      <div class="track2" id="track"></div>
+    </div>
+    <div class="road" id="road"></div>
+    <div class="panel" style="margin-top:14px" id="killbox"></div>
+  </section>
+</main>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const now=()=>{const d=new Date();return d.toTimeString().slice(0,5)};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* Tabs */
+const tabs=[...document.querySelectorAll('nav.tabs button')];
+function show(id){tabs.forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===id)));
+  document.querySelectorAll('main section').forEach(s=>s.hidden=s.id!==id);}
+tabs.forEach(b=>b.addEventListener('click',()=>show(b.dataset.tab)));
+const h=(location.hash||'').slice(1); if(['overview','kpi','roadmap','heal','build','gov','evals'].includes(h)) show(h);
+
+/* Health map */
+const apps=["Salesforce","HubSpot","Stripe","Zendesk","Shopify","NetSuite","Workday","Slack","Jira","QuickBooks","Marketo","Epic FHIR","Asana","Intercom","Mailchimp","Okta","ADP","Snowflake","Twilio","PagerDuty","Datadog","Google Sheets","Gmail","Zoom","DocuSign","Box","Dropbox","GitHub","ServiceNow","Xero","Greenhouse","BambooHR","Monday","Notion","Airtable","Freshdesk","Pipedrive","Square","Braze","Segment"];
+const state=Array.from({length:220},(_,i)=>({name:i<apps.length?apps[i]:`Connector ${i+1}`,s:'ok'}));
+state[1].s='drift';state[2].s='drift';state[4].s='broken';state[3].s='drift';state[57].s='broken';state[131].s='drift';
+function drawCells(){$('#cells').innerHTML=state.map(c=>`<div class="cell ${c.s==='ok'?'':c.s}" title="${esc(c.name)}: ${c.s==='ok'?'healthy':c.s==='drift'?'contract drift':c.s==='broken'?'broken':'patch in canary'}"></div>`).join('');
+  const bad=state.filter(c=>c.s!=='ok').length; $('#k-healthy').textContent=`${220-bad} / 220`; $('#k-healthy-d').textContent=bad?`${bad} need attention`:'All healthy';}
+drawCells();
+
+/* MTTR chart */
+(function(){const v=[11,10.4,8.9,7.2,5.8,4.6,3.9,3.1,2.6,2.2,1.9,1.6];const W=640,H=190,L=34,R=12,T=24,B=26;
+ const x=i=>L+i*(W-L-R)/(v.length-1),y=d=>T+(1-d/12)*(H-T-B);
+ let s='';[0,3,6,9,12].forEach(t=>{s+=`<line x1="${L}" x2="${W-R}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)" stroke-width="1"/><text x="${L-8}" y="${y(t)+3}" text-anchor="end">${t}</text>`});
+ v.forEach((d,i)=>{if(i%2===0||i===v.length-1)s+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle">W${i+1}</text>`});
+ const p=v.map((d,i)=>`${x(i)},${y(d)}`).join(' ');
+ s+=`<polygon points="${x(0)},${y(0)} ${p} ${x(v.length-1)},${y(0)}" fill="var(--accent)" opacity=".12"/>`;
+ s+=`<polyline points="${p}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>`;
+ s+=`<line x1="${L}" x2="${W-R}" y1="${y(1)}" y2="${y(1)}" stroke="var(--ok)" stroke-dasharray="4 4"/><text x="${x(3)}" y="${y(1)-6}" style="fill:var(--ok)">Phase 2 target: under 1 day</text>`;
+ s+=`<circle cx="${x(v.length-1)}" cy="${y(1.6)}" r="4.5" fill="var(--accent)"/><text x="${x(v.length-1)-8}" y="${y(1.6)-9}" text-anchor="end" style="fill:var(--ink);font-weight:500">1.6 d</text>`;
+ s+=`<circle cx="${x(0)}" cy="${y(11)}" r="3.5" fill="var(--ink-2)"/><text x="${x(0)+8}" y="${y(11)-8}" style="fill:var(--ink)">11 d baseline</text>`;
+ $('#mttr').innerHTML=s;})();
+
+/* Ledger with hash chain */
+let prev='0000000000';
+function fnv(str){let h=0x811c9dc5;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0}return h.toString(16).padStart(8,'0')}
+function ledger(actor,action){const hsh=fnv(prev+actor+action+Date.now()).slice(0,8)+fnv(action).slice(0,2);prev=hsh;
+  const tr=document.createElement('tr');tr.innerHTML=`<td class="mono">${now()}</td><td>${esc(actor)}</td><td>${esc(action)}</td><td class="mono">${hsh}</td>`;$('#ledger').prepend(tr);}
+[["Protect","Blocked flow: Workday national ID → #people-ops (policy PII-02)"],["Sense","Contract drift: HubSpot contacts schema changed"],["Heal","Patch drafted for INC-1042, replay 48/48 passed"],["Sense","Changelog for Stripe list endpoints parsed"],["A. Rao (engineer)","Approved INC-1039 Jira date parser, canary 1% → 100%"]].reverse().forEach(e=>ledger(e[0],e[1]));
+
+/* Feed */
+const who={Sense:'sense',Heal:'heal',Grow:'grow',Protect:'protect'};
+function feed(agent,text){const li=document.createElement('li');li.className='new';
+  li.innerHTML=`<time>${now()}</time><div><span class="who ${who[agent]||'human'}">${esc(agent)}</span>${esc(text)}</div>`;
+  const f=$('#feed');f.prepend(li);while(f.children.length>40)f.lastChild.remove();}
+[["Sense","Drift on HubSpot contacts: field phone_number missing from 37 tenants' payloads"],["Heal","INC-1042 diagnosed as field rename (confidence 0.93). Patch ready for review"],["Protect","Blocked Workday national ID → Slack. Notified tenant admin"],["Sense","Stripe list endpoint now returns a cursor; offset ignored after 100 records"],["Heal","INC-1043 patch passed 60/60 replayed runs in sandbox"],["Sense","Shopify announced legacy API key retirement. 41 tenants affected"],["Protect","Ignored instructions found inside a vendor changelog. Security alerted"]].reverse().forEach(e=>feed(e[0],e[1]));
+const stream=[["Sense","Spec diff: Intercom list responses now wrapped in a data envelope"],["Protect","Masked 3 phone numbers in Zendesk ticket text → Snowflake"],["Grow","Draft plan created: Datadog critical alert → PagerDuty incident"],["Sense","Error signatures normal across 214 connectors"],["Protect","Consent check passed: Salesforce contacts → Mailchimp (consent = true)"],["Heal","Replay corpus refreshed: 12,400 redacted runs across top 25 connectors"],["Sense","Mailchimp now requires an idempotency key on create. Watching for duplicates"],["Protect","Escalated: ADP salary → Looker needs data-owner approval"],["Sense","503 spike on Zendesk matches vendor status incident. No patch needed (retrying)"],["Grow","Asked a clarifying question: what counts as a big deal?"]];
+let si=0,runs=0;
+setInterval(()=>{const e=stream[si++%stream.length];feed(e[0],e[1]);if(e[0]==='Protect'){const k=$('#k-flows');k.textContent=(parseInt(k.textContent.replace(/,/g,''))+1).toLocaleString()}},4200);
+const start=new Date();start.setHours(0,0,0,0);runs=Math.floor((Date.now()-start)/1000*34.7);
+setInterval(()=>{runs+=Math.floor(30+Math.random()*10);$('#k-runs').textContent=runs.toLocaleString()},1000);
+$('#k-runs').textContent=runs.toLocaleString();
+
+/* Incidents */
+const incs=[
+{id:'INC-1042',app:'HubSpot',title:'Contact field renamed',tier:'t2',tierL:'T2 Medium',tenants:37,conf:0.93,replay:'48 / 48',cell:1,
+ change:'Contacts API renamed field phone_number to phone.',symptom:'No errors. Phone numbers have been arriving empty downstream for 37 tenants since 09:12.',
+ diag:'Schema drift. The source field was renamed, so the mapping reads a field that no longer exists.',
+ diff:[['','mappings:'],['r','  - source: contact.phone_number'],['a','  - source: contact.phone'],['','    target: lead.Phone'],['a','backfill:'],['a','  window: 2026-10-26T09:12Z → now'],['a','  records: 1,906 (dry run first)']],
+ plain:'Phone numbers stopped syncing this morning because HubSpot renamed the field. The fix reads the new field name and refills the 1,906 records that came through empty. No new data is collected and no new permissions are needed.',
+ checks:[['y','Replay of 48 recent runs passed'],['y','No new OAuth scopes requested'],['y','Protect: no new sensitive fields'],['w','Backfill writes to customer CRM (needs approval)']]},
+{id:'INC-1043',app:'Stripe',title:'Pagination changed to cursor',tier:'t1',tierL:'T1 Low',tenants:112,conf:0.97,replay:'60 / 60',cell:2,
+ change:'List endpoint moved from offset to cursor pagination (starting_after).',symptom:'Each run syncs only the first 100 invoices.',
+ diag:'Pagination contract changed. Offset is now ignored after the first page.',
+ diff:[['','def list_invoices(client):'],['r','    for offset in range(0, total, 100):'],['r','        yield client.get("/invoices", offset=offset)'],['a','    cursor = None'],['a','    while True:'],['a','        page = client.get("/invoices", limit=100, starting_after=cursor)'],['a','        yield page.data'],['a','        if not page.has_more: break'],['a','        cursor = page.data[-1].id']],
+ plain:'Only the first 100 Stripe invoices were syncing. The fix reads every page. Nothing about which data is collected changes.',
+ checks:[['y','Replay of 60 recent runs passed, full record counts'],['y','No new OAuth scopes requested'],['y','Protect: no new sensitive fields'],['y','Change class T1, eligible for autonomy in Phase 2']]},
+{id:'INC-1044',app:'Shopify',title:'Legacy API keys retired',tier:'t3',tierL:'T3 High',tenants:41,conf:0.99,replay:'n/a',cell:4,
+ change:'Legacy API keys are retired. Stores must re-authorize with OAuth.',symptom:'HTTP 401 on every run for 41 tenants.',
+ diag:'Authentication model changed. Only the customer can grant new consent, so the agent cannot fix this alone.',
+ diff:[['','# No code patch. The agent will not request access on the customer\'s behalf.'],['a','notify: tenant_admins'],['a','action: re-authorize with OAuth'],['a','scopes: read_orders, read_products   # same as today, nothing broader']],
+ plain:'Shopify retired the old login method. An admin at each affected store needs to reconnect Shopify once. We ask for exactly the same access as today.',
+ checks:[['y','Requested scopes equal current scopes'],['y','Protect: no new data'],['n','Cannot be auto-applied (needs customer consent)']],escalate:true}
+];
+let sel=0;
+function listIncs(){$('#inclist').innerHTML=incs.map((c,i)=>`<button class="inc ${c.tier} ${c.done?'done':''}" aria-current="${i===sel}" data-i="${i}">
+  <div class="row"><span class="id">${c.id} · ${esc(c.app)}</span><span class="pill ${c.done?'ok':c.tier==='t1'?'info':c.tier==='t2'?'warn':'bad'}">${c.done?'Resolved':c.tierL}</span></div>
+  <div class="t">${esc(c.title)}</div><div class="m">${c.tenants} tenants · confidence ${c.conf.toFixed(2)}</div></button>`).join('');
+  document.querySelectorAll('.inc').forEach(b=>b.addEventListener('click',()=>{sel=+b.dataset.i;listIncs();detail()}));
+  const open=incs.filter(c=>!c.done).length;$('#qcount').textContent=open;$('#qcount').hidden=!open;}
+function detail(){const c=incs[sel];
+  $('#incdetail').innerHTML=`<div class="panel-h"><div><span class="label">${c.id} · ${esc(c.app)} · ${c.tierL}</span><h2 style="font-size:20px;margin-top:2px">${esc(c.title)}</h2></div>
+   <span class="pill ${c.done?'ok':'warn'}" id="istate">${c.done?'Resolved':c.escalate?'Waiting on customer':'Waiting for your approval'}</span></div>
+   <div class="facts"><div class="fact"><div class="label">Tenants</div><div class="v">${c.tenants}</div></div><div class="fact"><div class="label">Confidence</div><div class="v">${c.conf.toFixed(2)}</div></div>
+   <div class="fact"><div class="label">Replay tests</div><div class="v">${c.replay}</div></div><div class="fact"><div class="label">Human time</div><div class="v">~4 min</div></div></div>
+   <div class="two"><div><h3>What changed upstream</h3><p style="margin:0 0 10px">${esc(c.change)}</p><h3>What customers see</h3><p style="margin:0 0 10px">${esc(c.symptom)}</p><h3>Diagnosis</h3><p style="margin:0">${esc(c.diag)}</p></div>
+   <div><h3>In plain language (sent to the customer)</h3><div class="summary">${esc(c.plain)}</div><h3 style="margin-top:12px">Checks</h3><ul class="checks">${c.checks.map(k=>`<li><span class="ck ${k[0]}">${k[0]==='y'?'✓':k[0]==='n'?'×':'!'}</span><span>${esc(k[1])}</span></li>`).join('')}</ul></div></div>
+   <h3 style="margin-top:14px">Proposed change</h3><pre class="diff">${c.diff.map(l=>`<span class="${l[0]}">${l[0]==='a'?'+ ':l[0]==='r'?'- ':'  '}${esc(l[1])}</span>`).join('')}</pre>
+   <div class="actions">${c.done?'<span class="pill ok">Rolled out to 100% · audit entry written</span>':c.escalate?`<button class="btn primary" id="act">Notify ${c.tenants} store admins</button><button class="btn" id="rej">Hold</button>`:`<button class="btn primary" id="act">Approve and start canary</button><button class="btn" id="edit">Request changes</button><button class="btn danger" id="rej">Reject</button>`}</div>
+   <div id="canary" hidden><div class="progress"><i id="pbar"></i></div><div class="canary" id="ptext"></div></div>`;
+  const a=$('#act'); if(a) a.addEventListener('click',()=>approve(c));
+  const r=$('#rej'); if(r) r.addEventListener('click',()=>{ledger('A. Rao (engineer)',`${r.textContent==='Hold'?'Held':'Rejected'} ${c.id}. Reason captured as new eval case`);feed('Heal',`${c.id} ${r.textContent==='Hold'?'held':'rejected'} by engineer. Added to Golden Data Set`);$('#istate').textContent=r.textContent==='Hold'?'On hold':'Rejected';$('#istate').className='pill bad'});
+  const e=$('#edit'); if(e) e.addEventListener('click',()=>{$('#istate').textContent='Agent revising';$('#istate').className='pill info';feed('Heal',`${c.id}: engineer asked for changes. Revising patch`)});}
+function approve(c){document.querySelectorAll('#incdetail .actions .btn').forEach(b=>b.disabled=true);
+  if(c.escalate){ledger('A. Rao (engineer)',`Approved customer notice for ${c.id} (${c.tenants} tenants)`);feed('Heal',`${c.id}: re-authorization request sent to ${c.tenants} store admins`);$('#istate').textContent='Notice sent';$('#istate').className='pill info';return;}
+  ledger('A. Rao (engineer)',`Approved ${c.id}, canary started`);state[c.cell].s='heal';drawCells();
+  $('#canary').hidden=false;const st=[[1,'Canary 1% of runs · 0 errors'],[10,'Canary 10% · 0 errors · error rate equal to baseline'],[50,'50% · 0 errors'],[100,'100% · rollback window open for 24 h']];let i=0;
+  $('#istate').textContent='Canary running';$('#istate').className='pill info';
+  const tick=()=>{if(i>=st.length){c.done=true;state[c.cell].s='ok';drawCells();ledger('Heal',`${c.id} rolled out to 100%. Workflow restored`);feed('Heal',`${c.id} resolved in 4 min of human time. Customers notified`);
+      const d=$('#k-days');d.textContent=+d.textContent+2;listIncs();detail();return;}
+    $('#pbar').style.width=st[i][0]+'%';$('#ptext').textContent=st[i][1];i++;setTimeout(tick,1300)};tick();}
+listIncs();detail();
+setTimeout(()=>{incs.push({id:'INC-1045',app:'Zendesk',title:'Rate limit lowered',tier:'t1',tierL:'T1 Low',tenants:58,conf:0.95,replay:'40 / 40',cell:3,
+ change:'Rate limit lowered and Retry-After header introduced.',symptom:'Bursts of HTTP 429 at peak hours. Some ticket syncs fail.',diag:'Throttling, not a contract break. No schema change needed.',
+ diff:[['','def call(client, req):'],['r','    return client.send(req)'],['a','    resp = client.send(req)'],['a','    if resp.status == 429:'],['a','        sleep(int(resp.headers.get("Retry-After", 2)))'],['a','        return call(client, req)'],['a','    return resp']],
+ plain:'Zendesk now allows fewer requests per minute, so some syncs failed at busy times. The fix waits when Zendesk asks it to. No data changes.',
+ checks:[['y','Replay of 40 runs passed at peak load'],['y','No new scopes'],['y','Protect: no new sensitive fields']]});
+ feed('Heal','New incident INC-1045 Zendesk rate limit. Patch ready for review');listIncs();},20000);
+
+/* Build from intent */
+const ex=[
+ {t:'When an opportunity is Closed Won in Salesforce, create a project in Asana and a draft invoice in QuickBooks.',kind:'build'},
+ {t:'Post in Slack when a big deal closes.',kind:'ask'},
+ {t:'Export customer credit card numbers from Stripe to a Google Sheet.',kind:'refuse'},
+ {t:'Send patient appointment reminders from Epic by SMS through Twilio.',kind:'escalate'}];
+document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>{$('#intent').value=ex[+b.dataset.ex].t}));
+function classify(t){const s=t.toLowerCase();if(/card|pan\b|credit/.test(s))return'refuse';if(/patient|epic|appointment|diagnos/.test(s))return'escalate';if(/big deal|important|large/.test(s))return'ask';return'build'}
+const plans={
+ build:{steps:[['Understand the request','Trigger: Opportunity stage becomes Closed Won. Two actions: create an Asana project, create a draft QuickBooks invoice.'],['Choose connectors','Salesforce, Asana and QuickBooks are already in the library. No new connector needed.'],['Map fields','4 mappings found. 1 contains personal data.'],['Check policy (Protect)','Personal data stays inside approved systems. Invoice is created as a draft, never sent automatically.'],['Test in sandbox','Ran 3 synthetic opportunities. 3 of 3 created the right project and invoice.']],
+  map:[['Opportunity.Name','Asana Project.name',''],['Opportunity.Amount','QuickBooks Invoice.TotalAmt',''],['Account.Name','QuickBooks Customer.DisplayName',''],['Contact.Email','QuickBooks Invoice.BillEmail','Personal data']],state:['ok','Ready for review'],act:'Submit for approval'},
+ ask:{steps:[['Understand the request','Trigger: deal closes in Salesforce. Action: post to Slack.'],['Clarify before building','"Big" is not defined. Guessing would create noise or miss deals.']],
+  q:'What counts as a big deal? For example: amount over $50,000, or the top 10% of deals this quarter. Which Slack channel should it post to?',state:['warn','Needs your answer'],stopAt:1,stopKind:'ask'},
+ refuse:{steps:[['Understand the request','Move card numbers from Stripe into a spreadsheet.'],['Check policy (Protect)','Full card numbers are payment card data. Policy PCI-01 blocks moving them to any destination.']],
+  q:'This was not built. I can sync the card brand and last 4 digits with the customer ID instead, which covers most reconciliation needs.',state:['bad','Blocked by policy'],stopAt:1,stopKind:'stop'},
+ escalate:{steps:[['Understand the request','Send SMS appointment reminders from Epic through Twilio.'],['Map fields','Only first name and appointment time are needed. Diagnosis and clinical fields are left out (minimum necessary).'],['Check policy (Protect)','This is health information (PHI). Twilio must be covered by a signed BAA, and compliance must approve before it goes live.']],
+  q:'Plan drafted with minimum-necessary fields. Sent to your compliance officer for approval. Nothing goes live until they sign off.',state:['warn','Waiting on compliance'],stopAt:2,stopKind:'ask'}};
+function renderPlan(){const kind=classify($('#intent').value);const p=plans[kind];$('#mapwrap').innerHTML='';$('#planactions').innerHTML='';
+  $('#steps').innerHTML=p.steps.map((s,i)=>`<li class="wait"><span class="dot">${i+1}</span><div><div class="st">${esc(s[0])}</div><div class="sd">${esc(s[1])}</div></div></li>`).join('');
+  $('#planstate').textContent='Planning…';$('#planstate').className='pill info';const lis=[...$('#steps').children];let i=0;
+  const step=()=>{if(i<lis.length){lis[i].classList.remove('wait');lis[i].classList.add(p.stopAt===i?p.stopKind:'done');lis[i].querySelector('.dot').textContent=p.stopAt===i?(p.stopKind==='stop'?'×':'?'):'✓';
+      if(kind==='build'&&i===2)$('#mapwrap').innerHTML=`<div class="tscroll" style="margin:4px 0 6px"><table><thead><tr><th>From</th><th>To</th><th>Data</th></tr></thead><tbody>${p.map.map(m=>`<tr><td class="mono">${m[0]}</td><td class="mono">${m[1]}</td><td>${m[2]?`<span class="pill warn">${m[2]}</span>`:'<span class="pill ok">OK</span>'}</td></tr>`).join('')}</tbody></table></div>`;
+      i++;setTimeout(step,700);return;}
+    $('#planstate').textContent=p.state[1];$('#planstate').className='pill '+p.state[0];
+    if(p.q)$('#planactions').innerHTML=`<div class="summary" style="width:100%">${esc(p.q)}</div>`;
+    if(p.act){$('#planactions').innerHTML=`<button class="btn primary" id="sub">${p.act}</button><span class="label">Integration engineer reviews · ~10 min</span>`;
+      $('#sub').addEventListener('click',()=>{ledger('Grow','Plan submitted for review: Closed Won → Asana + QuickBooks');feed('Grow','Plan submitted: Closed Won → Asana project + QuickBooks draft invoice');$('#planstate').textContent='Submitted for review';$('#sub').disabled=true});}
+    feed(kind==='build'?'Grow':kind==='refuse'?'Protect':'Grow',kind==='build'?'Plan ready: 4 mappings, sandbox 3/3 passed':kind==='refuse'?'Blocked request to move card numbers (PCI-01)':kind==='ask'?'Asked a clarifying question before building':'PHI flow sent to compliance for approval');};
+  step();}
+$('#plan').addEventListener('click',renderPlan);
+
+/* Kill switches */
+$('#switches').innerHTML=['Sense','Heal','Grow','Protect'].map(a=>`<div class="switch"><span><b>${a}</b> <span style="color:var(--ink-3);font-size:12px">${a==='Protect'?'cannot be paused':'active'}</span></span><button class="tog" aria-pressed="true" aria-label="${a} agent" ${a==='Protect'?'disabled':''} data-a="${a}"></button></div>`).join('');
+document.querySelectorAll('.tog').forEach(t=>t.addEventListener('click',()=>{const on=t.getAttribute('aria-pressed')!=='true';t.setAttribute('aria-pressed',String(on));t.previousElementSibling.querySelector('span').textContent=on?'active':'paused';ledger('Tenant admin',`${on?'Resumed':'Paused'} ${t.dataset.a} agent`)}));
+
+/* Evals */
+const ev=[['Heal: diagnosis + patch passes replay',84,80,95,'%'],['Grow: plan matches expected (incl. ask / refuse)',79,75,90,'%'],['Protect: sensitive-data recall',99.4,99,99.5,'%'],['Adversarial: injection resisted',100,100,100,'%']];
+$('#bars').innerHTML=ev.map(e=>{const lo=e[0].startsWith('Protect')?95:0,sc=v=>((v-lo)/(100-lo)*100);return `<div class="bar-row"><div class="top"><span>${esc(e[0])}</span><b style="font-variant-numeric:tabular-nums">${e[1]}${e[4]}</b></div>
+ <div class="track"><div class="fill" style="width:${sc(e[1])}%;background:${e[1]>=e[3]?'var(--ok)':'var(--accent)'}"></div><div class="gate" style="left:calc(${sc(e[2])}% - 1px)"></div><div class="gate g2" style="left:calc(${sc(e[3])}% - 1px)"></div></div>
+ <div class="gate-l"><span>Ship gate ${e[2]}%</span><span>Autonomy gate ${e[3]}%</span>${lo?`<span>Scale starts at ${lo}%</span>`:''}<span>${e[1]>=e[3]?'Autonomy unlocked':e[1]>=e[2]?'Shipped, assisted only':'Below ship gate'}</span></div></div>`}).join('');
+/* ===== KPIs ===== */
+const WEEK=10, WEEKS=10;
+const K=[
+ {id:'gap30',g:'north',name:'Enterprise accounts with a critical gap by day 30',u:'%',dir:'down',base:73,mvp:65,m12:50,s:[73,73,72,72,71,70,70,69,68,68],def:'Share of design-partner enterprise accounts with an unresolved critical integration gap 30 days after onboarding.',src:'Onboarding cohort in CRM + support tickets tagged "integration gap"'},
+ {id:'mttr',g:'drivers',name:'Median time to repair a broken connector',u:' d',dir:'down',base:11,mvp:2,m12:1,s:[11,9.8,8.1,6.4,5,3.9,3,2.4,1.9,1.6],def:'From first failed run to fix live at 100%.',src:'Incident log + deploy events'},
+ {id:'maint',g:'drivers',name:'Integration capacity spent on maintenance',u:'%',dir:'down',base:60,mvp:40,m12:25,s:[61,60,58,56,53,51,49,47,45,44],def:'Engineer hours on break-fix ÷ total integration hours.',src:'Jira time tracking, integration team'},
+ {id:'pre',g:'drivers',name:'Breaks caught before a customer reports them',u:'%',dir:'up',base:0,mvp:70,m12:90,s:[0,20,35,48,57,64,70,74,79,82],def:'Breaks first detected by Sense ÷ all breaks.',src:'Sense alerts vs first support ticket time'},
+ {id:'accept',g:'drivers',name:'Agent patches accepted as-is or with small edits',u:'%',dir:'up',base:0,mvp:70,m12:85,s:[0,0,55,61,66,70,74,78,80,81],def:'Also the kill criterion: must stay at or above 50% at week 12.',src:'Heal queue decisions (approve, edit, reject)'},
+ {id:'intent',g:'drivers',name:'Integrations delivered from plain-language intent',u:'',dir:'up',base:0,mvp:20,m12:300,s:[0,0,0,1,3,5,7,9,11,14],def:'Grow plans approved and live for design partners (month-12 target is per year).',src:'Grow plan log'},
+ {id:'days',g:'drivers',name:'Engineer-days returned per month',u:'',dir:'up',base:0,mvp:20,m12:36,s:[0,2,5,9,13,17,21,25,28,31],def:'Break-fix days avoided versus the 11-day baseline, net of review time.',src:'Incident log × baseline'},
+ {id:'leaks',g:'guard',name:'Sensitive-data leaks',u:'',max:0,s:[0,0,0,0,0,0,0,0,0,0],def:'Any personal data, PHI or card data reaching an unapproved destination or model.',src:'Protect ledger + security review'},
+ {id:'rollback',g:'guard',name:'Rollback rate',u:'%',max:2,s:[0,0,3.1,2.4,1.9,1.6,1.4,1.3,1.2,1.2],def:'Agent changes rolled back ÷ agent changes deployed.',src:'Deploy pipeline'},
+ {id:'rubber',g:'guard',name:'Approvals made in under 10 seconds',u:'%',max:5,s:[0,0,4,3,3,2,2,2,2,2],def:'Rubber-stamp detector for human-in-the-loop.',src:'Approval timestamps'},
+ {id:'inj',g:'guard',name:'Prompt-injection attempts resisted',u:'%',min:100,s:[100,100,100,100,100,100,100,100,100,100],def:'Golden Data Set adversarial cases + monthly red team.',src:'Eval service'},
+ {id:'eHeal',g:'evals',name:'Heal: diagnosis + patch passes replay',u:'%',ship:80,auto:95,s:[52,61,68,72,75,78,80,82,83,84],def:'18 Heal cases; autonomy gate applies to T1 change types.',src:'Golden Data Set run #27'},
+ {id:'eGrow',g:'evals',name:'Grow: plan matches expected (incl. ask / refuse)',u:'%',ship:75,auto:90,s:[40,48,55,61,66,70,73,76,78,79],def:'14 Grow cases.',src:'Golden Data Set run #27'},
+ {id:'eProt',g:'evals',name:'Protect: sensitive-data recall',u:'%',ship:99,auto:99.5,s:[97.1,97.8,98.2,98.6,98.9,99.0,99.1,99.2,99.3,99.4],def:'15 Protect cases; false-block rate 7% (limit 10%).',src:'Golden Data Set run #27'},
+];
+const KM=Object.fromEntries(K.map(k=>[k.id,k]));
+const cur=k=>k.s[k.s.length-1];
+function liveDays(){const el=document.getElementById('k-days');const v=el?parseInt(el.textContent,10):NaN;if(!isNaN(v)){KM.days.s[KM.days.s.length-1]=v}}
+function status(k){const c=cur(k);
+ if(k.g==='guard'){const ok=k.max!==undefined?c<=k.max:c>=k.min;return ok?['ok','Within limit']:['bad','Breached']}
+ if(k.g==='evals'){return c>=k.auto?['ok','Autonomy gate met']:c>=k.ship?['info','Ship gate met']:['bad','Below ship gate']}
+ const p=k.dir==='down'?(k.base-c)/(k.base-k.mvp):(c-k.base)/(k.mvp-k.base);
+ if(p>=1)return['ok','MVP target met']; if(p>=0.75)return['ok','On track']; if(p>=0.5)return['warn','At risk']; return['bad','Off track'];}
+const fmt=(v,u)=>(Number.isInteger(v)?v.toLocaleString():v.toFixed(1))+(u||'');
+function spark(k,big){const W=300,H=big?120:52,P=4,s=k.s;
+ const refs=[];if(k.g==='evals'){refs.push([k.ship,'dash']);refs.push([k.auto,'solid'])}else if(k.g==='guard'){refs.push([k.max!==undefined?k.max:k.min,'dash'])}else refs.push([k.mvp,'dash']);
+ const all=s.concat(refs.map(r=>r[0]));let lo=Math.min(...all),hi=Math.max(...all);if(hi===lo){hi+=1;lo-=1}const pad=(hi-lo)*.12;lo-=pad;hi+=pad;
+ const x=i=>P+i*(W-2*P)/(s.length-1),y=v=>P+(1-(v-lo)/(hi-lo))*(H-2*P);
+ const pts=s.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+ let o=`<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${esc(k.name)} trend over ${s.length} weeks">`;
+ refs.forEach(r=>{o+=`<line x1="0" x2="${W}" y1="${y(r[0])}" y2="${y(r[0])}" stroke="var(--ink-3)" stroke-width="1" ${r[1]==='dash'?'stroke-dasharray="4 4"':''} vector-effect="non-scaling-stroke"/>`});
+ o+=`<polygon points="${x(0)},${H} ${pts} ${x(s.length-1)},${H}" fill="var(--accent)" opacity=".1"/>`;
+ o+=`<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>`;
+ o+=`<circle cx="${x(s.length-1)}" cy="${y(cur(k))}" r="3.5" fill="var(--accent)"/></svg>`;return o}
+function targets(k){if(k.g==='guard')return k.max!==undefined?`Limit: ${k.max===0?'zero':'≤ '+fmt(k.max,k.u)}`:`Required: ${fmt(k.min,k.u)}`;
+ if(k.g==='evals')return`Ship gate ${fmt(k.ship,k.u)} · Autonomy gate ${fmt(k.auto,k.u)}`;
+ return`Baseline ${fmt(k.base,k.u)} · MVP target ${fmt(k.mvp,k.u)} · Month 12 ${fmt(k.m12,k.u)}`}
+function card(k,big){const st=status(k);
+ const head=`<div><div class="top"><span class="name">${esc(k.name)}</span><span class="pill ${st[0]}">${st[1]}</span></div>
+  <div class="val">${fmt(cur(k),k.u)}</div><div class="tg">${targets(k)}</div>${big?`<p class="def" style="margin-top:8px">${esc(k.def)}</p><p class="def">Source: ${esc(k.src)}</p>`:''}</div>`;
+ return `<div class="kc ${big?'big':''}">${head}<div>${spark(k,big)}${big?'':`<p class="def">${esc(k.def)} <span title="Source">Source: ${esc(k.src)}</span></p>`}</div></div>`}
+function renderKPIs(){liveDays();
+ $('#g-north').innerHTML=card(KM.gap30,true);
+ $('#g-drivers').innerHTML=K.filter(k=>k.g==='drivers').map(k=>card(k)).join('');
+ $('#g-guard').innerHTML=K.filter(k=>k.g==='guard').map(k=>card(k)).join('');
+ $('#g-evals').innerHTML=K.filter(k=>k.g==='evals').map(k=>card(k)).join('');
+ const sts=K.map(status);const n=c=>sts.filter(s=>s[0]===c).length;
+ $('#kstrip').innerHTML=[['Program week',`${WEEK} of 12`,''],['KPIs tracked',K.length,''],['Met or on track',n('ok'),'good'],['At risk',n('warn'),''],['Off track or breached',n('bad'),'']].map(c=>`<div class="kpi"><div class="label">${c[0]}</div><div class="v">${c[1]}</div></div>`).join('');}
+
+/* ===== Roadmap ===== */
+const gate=(label,id,test,show)=>({label,id,test,show});
+const PH=[
+ {name:'Foundations',when:'Weeks 1–4',state:'done',who:'Human builds the tests',items:[['y','Golden Data Set v1, 47 cases'],['y','Replay harness on top 25 connectors'],['y','Hash-chained audit ledger'],['y','Contract watcher live'],['y','5 design partners signed']],gl:'Exit gates',gates:[gate('Golden Data Set ≥ 40 cases',null,()=>true,()=>'47')]},
+ {name:'MVP · Assist',when:'Weeks 5–12',state:'cur',who:'In the loop: a human approves every change',items:[['y','Sense + Heal on top 25 connectors'],['y','Protect v1 and Control Tower'],['y','Shadow mode, then assisted mode'],['w','Grow-lite for design partners'],['w','Connector drafts from OpenAPI specs'],['n','Week-12 ship-gate review']],gl:'Ship gates (to finish MVP)',
+  gates:[gate('Heal eval ≥ 80%','eHeal',k=>cur(k)>=80),gate('Grow eval ≥ 75%','eGrow',k=>cur(k)>=75),gate('Protect recall ≥ 99%','eProt',k=>cur(k)>=99),gate('Injection resisted 100%','inj',k=>cur(k)>=100),gate('Zero sensitive-data leaks','leaks',k=>cur(k)===0),gate('Repair time under 2 days','mttr',k=>cur(k)<2),gate('North star ≤ 65%','gap30',k=>cur(k)<=65)]},
+ {name:'Trusted autonomy',when:'Months 4–9',state:'next',who:'On the loop: notified, can veto low-risk fixes',items:[['n','Auto-fix T1 changes with canary'],['n','All 220 connectors'],['n','Grow self-serve for enterprise'],['n','Sense proposes gaps to close']],gl:'Unlock gates',
+  gates:[gate('Heal eval ≥ 95% on T1','eHeal',k=>cur(k)>=95),gate('Grow eval ≥ 90%','eGrow',k=>cur(k)>=90),gate('Protect recall ≥ 99.5%','eProt',k=>cur(k)>=99.5),gate('Patch acceptance ≥ 85%','accept',k=>cur(k)>=85),gate('Rollback rate < 2%','rollback',k=>cur(k)<2),gate('Rubber-stamp rate < 5%','rubber',k=>cur(k)<5)]},
+ {name:'Autonomous',when:'Months 10–18',state:'next',who:'Over the loop: audits; auth and PHI stay human',items:[['n','Sense finds gaps first'],['n','Policies written in plain English'],['n','MCP server for external agents'],['n','ISO/IEC 42001 certification']],gl:'Unlock gates',
+  gates:[gate('Phase 2 live 3 months, rollback < 1%','rollback',k=>false,()=> 'not started'),gate('North star ≤ 50%','gap30',k=>cur(k)<=50),gate('Maintenance share ≤ 25%','maint',k=>cur(k)<=25)]}];
+function renderRoadmap(){
+ const segs=[[4,'Foundations','done'],[8,'MVP · Assist','cur'],[26,'Trusted autonomy','next'],[39,'Autonomous','next']];const tot=77,today=WEEK;
+ $('#track').innerHTML=segs.map(s=>`<div class="seg ${s[2]}" style="flex:${s[0]}">${s[1]}</div>`).join('')+`<div class="today" style="left:${(today/tot*100).toFixed(2)}%"><span>Today · week ${today}</span></div>`;
+ $('#road').innerHTML=PH.map(p=>{const res=p.gates.map(g=>{const k=g.id?KM[g.id]:null;const ok=g.test(k);const v=g.show?g.show():fmt(cur(k),k.u);return[ok,g.label,v]});const met=res.filter(r=>r[0]).length;
+  return `<div class="ph ${p.state==='cur'?'cur':''}"><div class="panel-h" style="margin:0"><div><span class="label">${p.when}</span><h3>${esc(p.name)}</h3></div><span class="pill ${p.state==='done'?'ok':p.state==='cur'?'accent':'ghost'}">${p.state==='done'?'Done':p.state==='cur'?'In progress':'Gated'}</span></div>
+  <div class="who">${esc(p.who)}</div>
+  <ul>${p.items.map(i=>`<li><span class="ck ${i[0]==='n'?'o':i[0]}">${i[0]==='y'?'✓':i[0]==='w'?'…':'○'}</span><span>${esc(i[1])}${i[0]==='w'?' <span style="color:var(--ink-3)">(in progress)</span>':''}</span></li>`).join('')}</ul>
+  <div class="gl">${p.gl} · ${met} of ${res.length} met</div><div class="meter"><i style="width:${met/res.length*100}%"></i></div>
+  <ul>${res.map(r=>`<li><span class="ck ${r[0]?'y':'n'}">${r[0]?'✓':'×'}</span><span style="flex:1">${esc(r[1])}</span><span class="mono" style="font-family:var(--f-mono);font-size:12px;color:var(--ink-2)">${esc(r[2])}</span></li>`).join('')}</ul></div>`}).join('');
+ const acc=cur(KM.accept);
+ $('#killbox').innerHTML=`<div class="panel-h" style="margin:0 0 6px"><h2>Kill criterion</h2><span class="pill ${acc>=50?'ok':'bad'}">${acc>=50?'Clear: continue':'Triggered: stop autonomy work'}</span></div>
+  <p style="margin:0;font-size:13px;color:var(--ink-2)">If shadow-mode patch acceptance is under 50% at week 12, stop autonomy work and keep Heal as an engineer copilot. Current acceptance: <b style="color:var(--ink)">${acc}%</b>. One ship gate is still open: the north star must fall from 68% to 65% by the week-12 review.</p>`;}
+renderKPIs();renderRoadmap();
+tabs.forEach(b=>b.addEventListener('click',()=>{if(b.dataset.tab==='kpi'){renderKPIs()}if(b.dataset.tab==='roadmap'){renderRoadmap()}}));
+
+})();
+</script>
+</body></html>
